@@ -1,29 +1,16 @@
 import * as Papa from "papaparse";
-import { InternalErrorCodes } from "./error";
+import { CsvFromUrlResponse } from "./response";
+import {
+  InternalErrorCodes,
+  ENTRY_HIDDEN_FIELD_PREFIXES,
+  INDEX_HIDDEN_FIELD_PREFIXES,
+  RESERVED_PREFIXES,
+} from "./const";
 
 type Row = {
+  // reserved keys
   $http?: string;
 } & Record<string, string>;
-
-type InternalError = {
-  type: "internal-error";
-  message: string;
-  code: InternalErrorCodes;
-};
-
-type ExternalError = {
-  type: "external-error";
-  status: number;
-  message: string;
-};
-
-type FulfilledResponse = {
-  type: "response";
-  status: number;
-  data?: unknown;
-};
-
-type CsvFromUrlResponse = InternalError | ExternalError | FulfilledResponse;
 
 type CsvFromUrlOptions = {
   url: string;
@@ -35,29 +22,26 @@ type CsvFromUrlOptions = {
 
 type columnFilterMode = "index" | "entry";
 
-function filterColumn(row: any, mode: columnFilterMode) {
-  const prefixes = mode === "index" ? ["$", "!"] : ["$"];
+/**
+ * Filters a given row based on the provided mode.
+ * If the mode is "index", it removes unique identifiers (starting with "@") and hidden fields (starting with "$" or "!").
+ * If the mode is "entry", it removes unique identifiers, hidden fields (starting with "$"), and shallow ids on entries (starting with "!").
+ * The function returns the filtered row.
+ */
+function processRow(row: any, mode: columnFilterMode) {
+  const hiddenFieldPrefixes =
+    mode === "index"
+      ? INDEX_HIDDEN_FIELD_PREFIXES
+      : ENTRY_HIDDEN_FIELD_PREFIXES;
 
   Object.keys(row).forEach((key) => {
-    if (key.startsWith("@")) {
-      // remove unique ids
-      const newKey = key.slice(1);
-      const value = row[key];
-
-      delete row[key];
-
-      row[newKey] = value;
-    }
-
-    if (prefixes.some((prefix) => key.startsWith(prefix))) {
+    if (hiddenFieldPrefixes.some((prefix) => key.startsWith(prefix))) {
       // delete hidden fields
       delete row[key];
     }
 
-    if (mode === "entry") {
-      if (key.startsWith("!")) {
-        // remove shallow ids on entries
-
+    RESERVED_PREFIXES.some((prefix) => {
+      if (key.startsWith(prefix)) {
         const newKey = key.slice(1);
         const value = row[key];
 
@@ -65,13 +49,13 @@ function filterColumn(row: any, mode: columnFilterMode) {
 
         row[newKey] = value;
       }
-    }
+    });
   });
 
   return row;
 }
 
-export async function csvFromUrl(
+export async function processCsvFromUrl(
   options: CsvFromUrlOptions
 ): Promise<CsvFromUrlResponse> {
   try {
@@ -106,7 +90,7 @@ export async function csvFromUrl(
         return {
           type: "external-error",
           status: 404,
-          message: `Entry with ${options.query.field} of ${options.query.value} not found.`,
+          message: `Entry with '${options.query.field}' of '${options.query.value}' not found.`,
         };
       }
 
@@ -125,16 +109,16 @@ export async function csvFromUrl(
       return {
         type: "response",
         status: 200,
-        data: filterColumn(entryRow, "entry"),
+        data: processRow(entryRow, "entry"),
       };
     }
 
-    const finalIndex = parsed.data.map((row) => filterColumn(row, "index"));
+    const processedRows = parsed.data.map((row) => processRow(row, "index"));
 
     return {
       type: "response",
       status: res.status,
-      data: finalIndex,
+      data: processedRows,
     };
   } catch (e) {
     console.error(e);

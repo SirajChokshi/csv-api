@@ -1,5 +1,5 @@
 import fastify from "fastify";
-import { csvFromUrl } from "./lib/csv";
+import { processCsvFromUrl } from "./lib/csv";
 
 const server = fastify();
 
@@ -42,7 +42,7 @@ server.route({
       fieldKey = paramKeys[paramKeys.findIndex((key) => key !== "url")];
     }
 
-    const result = await csvFromUrl({
+    const result = await processCsvFromUrl({
       url: params.url,
       query: fieldKey
         ? {
