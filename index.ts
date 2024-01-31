@@ -1,5 +1,6 @@
 import fastify from "fastify";
 import { processCsvFromUrl } from "./lib/csv";
+import { PORT } from "./lib/runtime";
 
 const server = fastify();
 
@@ -73,7 +74,7 @@ server.route({
   },
 });
 
-server.listen({ port: 8080 }, (err, address) => {
+server.listen({ port: PORT }, (err, address) => {
   if (err) {
     console.error(err);
     process.exit(1);
